@@ -3,6 +3,7 @@
 
 import functools
 import os, sys
+sys.path('YOUR_PYTHON_FILE_BASE_PATH')
 import yaml
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -32,7 +33,7 @@ from train.fsdp_utils import (
     FSDPCheckpoint, FSDPConfig, grad_checkpoint_check_fn, fsdp_wrapper, 
     fsdp_ema_setup, fsdp_ema_update,
 )
-from peft import LoraConfig, get_peft_model
+# from peft import LoraConfig, get_peft_model
 
 @dataclass
 class ModelArguments:
@@ -149,24 +150,6 @@ class DataArguments:
 
 @dataclass
 class TrainingArguments:
-    # --- lora params ---
-    use_lora: bool = field(default=False)
-    lora_r: int = field(default=8)
-    lora_alpha: int = field(default=32)
-    lora_dropout: float = field(default=0.05)
-    lora_target_modules: str = field(
-        default="all-linear",
-    )
-    # --- modality switches ---
-    visual_gen: bool = field(
-        default=True,
-        metadata={"help": "Train image generation branch."}
-    )
-    visual_und: bool = field(
-        default=True,
-        metadata={"help": "Train image understanding branch."}
-    )
-
     # --- bookkeeping & logging ---
     results_dir: str = field(
         default="results",
@@ -438,22 +421,7 @@ def main():
         for param in vae_model.parameters():
             param.requires_grad = False
 
-    if training_args.use_lora:
-        lora_config = LoraConfig(
-            r=training_args.lora_r,
-            lora_alpha=training_args.lora_alpha,
-            target_modules=training_args.lora_target_modules,
-            lora_dropout=training_args.lora_dropout,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-        model = get_peft_model(model, lora_config)
-        if dist.get_rank() == 0:
-            model.print_trainable_parameters()
-            for name, param in model.named_parameters():
-                # print(f"{name}: {param.requires_grad}")
-                pass
-    else:
+    if True:
         if training_args.freeze_llm:
             model.language_model.eval()
             for param in model.language_model.parameters():
@@ -462,11 +430,7 @@ def main():
             model.vit_model.eval()
             for param in model.vit_model.parameters():
                 param.requires_grad = False
-        #    if dist.get_rank() == 0:
-        #        for name, param in model.named_parameters():
-        #            print(f"{name}: {param.requires_grad}")
 
-    # Setup FSDP and load pretrained model:
     fsdp_config = FSDPConfig(
         sharding_strategy=training_args.sharding_strategy,
         backward_prefetch=training_args.backward_prefetch,
@@ -475,22 +439,14 @@ def main():
         num_shard=training_args.num_shard,
     )
     ema_model = deepcopy(model)
-    if training_args.use_lora:
-        model, ema_model = FSDPCheckpoint.try_load_ckpt(
-            resume_from, 
-            logger, 
-            model, 
-            ema_model, 
-            resume_from_ema=finetune_from_ema
-        )
-    else:
-        model, ema_model = FSDPCheckpoint.try_load_ckpt_all_params(
-            resume_from, 
-            logger, 
-            model, 
-            ema_model, 
-            resume_from_ema=finetune_from_ema
-        )
+    # else:
+    model, ema_model = FSDPCheckpoint.try_load_ckpt_all_params(
+        resume_from, 
+        logger, 
+        model, 
+        ema_model, 
+        resume_from_ema=finetune_from_ema
+    )
     ema_model = fsdp_ema_setup(ema_model, fsdp_config)
     fsdp_model = fsdp_wrapper(model, fsdp_config)
     apply_activation_checkpointing(
@@ -504,8 +460,6 @@ def main():
 
     if dist.get_rank() == 0:
         print(fsdp_model)
-        #    for name, param in model.named_parameters():
-        #        print(name, param.requires_grad)
 
     # Setup optimizer and scheduler
     optimizer = torch.optim.AdamW(

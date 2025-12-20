@@ -93,8 +93,10 @@ class MakeAnythingIconUnifiedEditIterableDataset(InterleavedBaseIterableDataset,
         scale = max(scale, min_image_size / min(w, h))
         new_w = make_divisible(w * scale)
         new_h = make_divisible(h * scale)
+        
         if (new_w, new_h) != (w, h): 
             image = image.resize((new_w, new_h), Image.LANCZOS)
+            
         return image
     
     def _parse_steps(self, full_steps):
@@ -103,4 +105,5 @@ class MakeAnythingIconUnifiedEditIterableDataset(InterleavedBaseIterableDataset,
         pattern = r"Step\d+:\s*(.*?)(?=,\s*Step|$)" 
         matches = re.findall(pattern, full_steps)
         steps = [s.strip() for s in matches]
+        
         return steps

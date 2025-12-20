@@ -224,7 +224,8 @@ class InterleaveInferencer:
         cfg_renorm_type="global",
         image_shapes=(1024, 1024),
     ) -> List[Union[str, Image.Image]]:
-
+        # 我们应该构建一个多轮对话的机制去模拟多张图文的交错输出.
+        # 最重要的一点就是：BAGEL应该是不支持同时解码多张图文的,换言之最多解码一张图出来.
         output_list = []
         gen_context = self.init_gen_context()
         cfg_text_context = deepcopy(gen_context)
@@ -248,7 +249,6 @@ class InterleaveInferencer:
                 elif isinstance(input_term, Image.Image):
                     input_term = self.vae_transform.resize_transform(pil_img2rgb(input_term))
                     gen_context = self.update_context_image(input_term, gen_context, vae=not understanding_output)
-
                     image_shapes = input_term.size[::-1]
                     cfg_text_context = deepcopy(gen_context)
 
