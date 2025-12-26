@@ -2,6 +2,14 @@
 
 ![theme](/assets/theme.jpg)
 
+Mingcheng Ye<sup>1</sup>,
+[Jiaming Liu](https://scholar.google.com/citations?hl=zh-CN&user=SmL7oMQAAAAJ&view_op=list_works&sortby=pubdate)<sup>2</sup>,
+[Yiren Song](https://scholar.google.com/citations?hl=zh-CN&user=L2YS0jgAAAAJ&view_op=list_works&sortby=pubdate)<sup>3</sup><sup>\#</sup>,
+
+\# Corresponding author
+
+<sup>1</sup>Beijing Institute of Technology, <sup>2</sup>Alibaba Group, <sup>3</sup>National University of Singapore
+
 ## Introduction
 
 ![showcase_1](/assets/image.png)
@@ -17,6 +25,8 @@ A vast and challenging class of real-world scenarios demands reasoning over inte
 - (1) **Procedural Generation**: Producing step-by-step tutorials where visual frames and textual explanations are interleaved to guide a user, such as in cooking guides or artistic workflows.
 - (2) **Compositional Reasoning**: Synthesizing a single, coherent scene from multiple, disparate visual and textual inputs, or the inverse, decomposing a scene into its constituent parts, for applications like virtual try-on.
 - (3) **Multi-Reference Generation**: Transforming a content image based on the semantic or stylistic properties of several reference images, such as in complex style transfer. Current open-source frameworks lack a unified mechanism to handle this full spectrum of multi-modal, multi-turn reasoning.
+
+*Note: We would like to thank the [Bagel team](https://github.com/ByteDance-Seed/Bagel) for integrating strong text and image generation capabilities into a single model, which enables Loom to be implemented elegantly at current time.*
 
 ## Key Innovation
 
