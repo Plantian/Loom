@@ -1,5 +1,7 @@
 # Loom: Diffusion-Transformer for Interleaved Generation
 
+<a href='https://arxiv.org/abs/2512.18254'><img src='https://img.shields.io/badge/Loom-Paper-green?logo=arxiv'></a>
+
 ![theme](/assets/theme.jpg)
 
 Mingcheng Ye<sup>1</sup>,
