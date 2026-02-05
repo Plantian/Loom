@@ -51,7 +51,7 @@ Our contributions are as follows:
 
 ### Code and Dataset Release
 
-Full training code, model and dataset pipeline is coming soon(we will release until the paper accepted!).
+Full training code, model and dataset pipeline is coming soon (we will release until the paper accepted!).
 And this is the interleaved tutorial sample belike:
 ![dataset_show](/assets/image_10.png)
 
