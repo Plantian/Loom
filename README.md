@@ -43,15 +43,15 @@ Our contributions are as follows:
 
 - (3) We curate a 50K interleaved tutorial dataset and present comprehensive experiments demonstrating Loom’s superior compositionality, temporal coherence, and text–image alignment.
 
-## Dataset
+## Code and Dataset
 
 ### Dataset Construction
 
 ![dataset](/assets/image_7.png)
 
-### Dataset Release
+### Code and Dataset Release
 
-Full dataset is coming soon(we will release on HuggingFace).
+Full training code, model and dataset pipeline is coming soon(we will release until the paper accepted!).
 And this is the interleaved tutorial sample belike:
 ![dataset_show](/assets/image_10.png)
 
