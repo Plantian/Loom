@@ -1,6 +1,17 @@
 # Loom: Diffusion-Transformer for Interleaved Generation
 
+<a href='https://arxiv.org/abs/2512.18254'><img src='https://img.shields.io/badge/Loom-Paper-green?logo=arxiv'></a>
+<a href='https://huggingface.co/datasets/plantian/Loom_01'><img src='https://img.shields.io/badge/Loom-Huggingface Dataset-yellow?logo=huggingface'></a>
+
 ![theme](/assets/theme.jpg)
+
+Mingcheng Ye<sup>1</sup>,
+[Jiaming Liu](https://scholar.google.com/citations?hl=zh-CN&user=SmL7oMQAAAAJ&view_op=list_works&sortby=pubdate)<sup>2</sup>,
+[Yiren Song](https://scholar.google.com/citations?hl=zh-CN&user=L2YS0jgAAAAJ&view_op=list_works&sortby=pubdate)<sup>3</sup><sup>\#</sup>,
+
+\# Corresponding author
+
+<sup>1</sup>Beijing Institute of Technology, <sup>2</sup>Alibaba Group, <sup>3</sup>National University of Singapore
 
 ## Introduction
 
@@ -18,6 +29,8 @@ A vast and challenging class of real-world scenarios demands reasoning over inte
 - (2) **Compositional Reasoning**: Synthesizing a single, coherent scene from multiple, disparate visual and textual inputs, or the inverse, decomposing a scene into its constituent parts, for applications like virtual try-on.
 - (3) **Multi-Reference Generation**: Transforming a content image based on the semantic or stylistic properties of several reference images, such as in complex style transfer. Current open-source frameworks lack a unified mechanism to handle this full spectrum of multi-modal, multi-turn reasoning.
 
+*Note: We would like to thank the [Bagel team](https://github.com/ByteDance-Seed/Bagel) for integrating strong text and image generation capabilities into a single model, which enables Loom to be implemented elegantly at current time.*
+
 ## Key Innovation
 
 To realize this unified approach, Loom treats text and image embeddings as sequentially composable elements within a shared latent space. We introduce a dual set of conditioning mechanisms to manage the complexity of **N-to-M** tasks. For procedural tasks, a language-planning strategy decomposes global instructions into local steps, which are associated with temporal frame embeddings and sparse historical frame sampling to maintain long-horizon coherence. For compositional and stylistic tasks, control is achieved via learnable entity tokens for structured grounding.
@@ -30,15 +43,15 @@ Our contributions are as follows:
 
 - (3) We curate a 50K interleaved tutorial dataset and present comprehensive experiments demonstrating Loom’s superior compositionality, temporal coherence, and text–image alignment.
 
-## Dataset
+## Code and Dataset
 
 ### Dataset Construction
 
 ![dataset](/assets/image_7.png)
 
-### Dataset Release
+### Code and Dataset Release
 
-Full dataset is coming soon(we will release on HuggingFace).
+Full training code, model and dataset pipeline is coming soon (we will release until the paper accepted!).
 And this is the interleaved tutorial sample belike:
 ![dataset_show](/assets/image_10.png)
 
