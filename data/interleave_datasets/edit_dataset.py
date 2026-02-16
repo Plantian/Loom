@@ -6,7 +6,7 @@ import random
 from PIL import Image, ImageFile, PngImagePlugin
 
 from .interleave_t2i_dataset import InterleavedBaseIterableDataset, ParquetStandardIterableDataset
-from ..data_utils import pil_img2rgb
+from ..data_utils_special import pil_img2rgb
 
 
 Image.MAX_IMAGE_PIXELS = 200000000

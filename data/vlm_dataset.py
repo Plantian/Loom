@@ -6,7 +6,7 @@ import os
 import traceback
 from PIL import Image, ImageFile, PngImagePlugin
 
-from .data_utils import pil_img2rgb
+from .data_utils_special import pil_img2rgb
 from .distributed_iterable_dataset import DistributedIterableDataset
 
 

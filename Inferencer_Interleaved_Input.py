@@ -11,24 +11,23 @@ from PIL import Image
 from pathlib import Path
 from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch, init_empty_weights
 from data.transforms import ImageTransform
-from data.data_utils import add_special_tokens
+from data.data_utils_special import add_special_tokens
 from modeling.bagel import BagelConfig, Bagel, Qwen2Config, Qwen2ForCausalLM, SiglipVisionConfig, SiglipVisionModel
 from modeling.qwen2 import Qwen2Tokenizer
 from modeling.autoencoder import load_ae
-# from peft import LoraConfig, get_peft_model
 from inferencer import InterleaveInferencer  
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='BAGEL Model Inference')
+    parser = argparse.ArgumentParser(description='Loom Inference Code')
     parser.add_argument('--parquet_path', type=str, help='Path to the input Parquet file')
     parser.add_argument('--end_id', type=int, help='Starting sample ID (default: 0)')
     parser.add_argument('--model_path', type=str, help='Path to the model directory')
     parser.add_argument('--ema_model_path', type=str, help='Path to EMA model checkpoint')
     parser.add_argument('--output_dir', type=str, help='Output directory for generated images')
     parser.add_argument('--max_mem_per_gpu', type=str, default="80GiB", help='Maximum memory per GPU')
-    parser.add_argument('--use_lora', type=bool, help='Whether to use LoRA')
-    parser.add_argument('--visual_gen', type=bool, help='Enable visual generation')
-    parser.add_argument('--visual_und', type=bool, help='Enable visual understanding')
+    parser.add_argument('--use_lora', type=bool, help='Whether to use LoRA') # no use
+    parser.add_argument('--visual_gen', type=bool, help='Enable visual generation') # set default to True
+    parser.add_argument('--visual_und', type=bool, help='Enable visual understanding') # set default to False
     return parser.parse_args()
 
 def initialize_model_and_inferencer(model_path, ema_model_path, max_mem_per_gpu, use_lora, visual_und, visual_gen):
@@ -51,8 +50,8 @@ def initialize_model_and_inferencer(model_path, ema_model_path, max_mem_per_gpu,
         visual_gen=visual_gen, visual_und=visual_und, llm_config=llm_config, vit_config=vit_config,
         vae_config=vae_config, vit_max_num_patch_per_side=70, connector_act='gelu_pytorch_tanh', latent_patch_size=2, max_latent_size=64,
     )
-    print(f"use_lora: {use_lora}")
-    print(f"visual_und: {visual_und}")
+    # print(f"use_lora: {use_lora}")
+    # print(f"visual_und: {visual_und}")
     
     with init_empty_weights():
         language_model = Qwen2ForCausalLM(llm_config)
@@ -60,8 +59,6 @@ def initialize_model_and_inferencer(model_path, ema_model_path, max_mem_per_gpu,
         model = Bagel(language_model, vit_model, config)
         if visual_und:
             model.vit_model.vision_model.embeddings.convert_conv2d_to_linear(vit_config, meta=True)
-        if use_lora:
-            pass
     
     # Tokenizer Preparing
     tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
@@ -80,7 +77,8 @@ def initialize_model_and_inferencer(model_path, ema_model_path, max_mem_per_gpu,
     
     print(f"device_map: {device_map}")
     same_device_modules = [
-        'language_model.model.embed_tokens', 'time_embedder', 'latent_pos_embed', 'vae2llm', 'llm2vae', 'connector', 'vit_pos_embed'
+        'language_model.model.embed_tokens', 'time_embedder', 'latent_pos_embed', 
+        'vae2llm', 'llm2vae', 'connector', 'vit_pos_embed'
     ]
     
     print(f"device_count: {torch.cuda.device_count()}")
@@ -97,20 +95,17 @@ def initialize_model_and_inferencer(model_path, ema_model_path, max_mem_per_gpu,
             if k in device_map:
                 device_map[k] = first_device
 
-    if use_lora:
-        pass
-    else:
-        model = load_checkpoint_and_dispatch(
-            model, checkpoint=os.path.join(ema_model_path, "ema.safetensors"),
-            device_map=device_map, offload_buffers=True, dtype=torch.bfloat16,
-            force_hooks=True, offload_folder="/tmp/offload"
-        )
+    model = load_checkpoint_and_dispatch(
+        model, checkpoint=os.path.join(ema_model_path, "ema.safetensors"), # use your own training model to evaluate the results.
+        device_map=device_map, offload_buffers=True, dtype=torch.bfloat16, force_hooks=True, offload_folder="/tmp/offload"
+    )
     
     model = model.eval()
     print('Model loaded')
 
     inferencer = InterleaveInferencer(
-        model=model, vae_model=vae_model, tokenizer=tokenizer, vae_transform=vae_transform, vit_transform=vit_transform, new_token_ids=new_token_ids
+        model=model, vae_model=vae_model, tokenizer=tokenizer, vae_transform=vae_transform, 
+        vit_transform=vit_transform, new_token_ids=new_token_ids
     )
     return inferencer
 
@@ -118,11 +113,11 @@ def generate_image(sample_id, row, inferencer, output_dir):
     instruction = row['instruction_list'][0]
     image_list = row['image_list']
 
-    if len(image_list) > 1:
-        gt_img = Image.open(BytesIO(image_list[-1]))
-        gt_path = os.path.join(output_dir, f"sample{sample_id}_gt.jpg")
-        gt_img.save(gt_path)
-        print(f"Saved ground truth: {gt_path}")
+    # if len(image_list) > 1:
+    #     gt_img = Image.open(BytesIO(image_list[-1]))
+    #     gt_path = os.path.join(output_dir, f"sample{sample_id}_gt.jpg")
+    #     gt_img.save(gt_path)
+    #     print(f"Saved ground truth: {gt_path}")
 
     inference_hyper = dict(
         cfg_text_scale=4.0,
@@ -139,9 +134,8 @@ def generate_image(sample_id, row, inferencer, output_dir):
         img = Image.open(BytesIO(img_bytes))
         input_list.append(img) # concat every image in one seq and generate the final image.
     
-    input_list.append(instruction)
-    output_dict = inferencer.interleave_inference(input_lists=input_list, **inference_hyper)
-    generated_img = output_dict[0]
+    input_list.append(instruction) # add input text prompt.
+    generated_img = inferencer.interleave_inference(input_lists=input_list, **inference_hyper)[0]
     
     gen_path = os.path.join(output_dir, f"sample{sample_id}_gen.jpg")
     generated_img.save(gen_path)
@@ -171,8 +165,11 @@ if __name__ == "__main__":
     
     inferencer = initialize_model_and_inferencer(
         model_path=args.model_path, ema_model_path=args.ema_model_path, 
-        max_mem_per_gpu=args.max_mem_per_gpu, use_lora=args.use_lora, visual_und=args.visual_und, visual_gen=args.visual_gen
+        max_mem_per_gpu=args.max_mem_per_gpu, use_lora=args.use_lora, 
+        visual_und=args.visual_und, visual_gen=args.visual_gen
     )
     
-    main(parquet_path=args.parquet_path, end_id=args.end_id, output_dir=args.output_dir, inferencer=inferencer,)
-    
+    main(
+        parquet_path=args.parquet_path, end_id=args.end_id, 
+        output_dir=args.output_dir, inferencer=inferencer,
+    )

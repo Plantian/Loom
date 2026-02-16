@@ -9,7 +9,7 @@ from PIL import Image
 from pathlib import Path
 from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch, init_empty_weights
 from data.transforms import ImageTransform
-from data.data_utils import add_special_tokens
+from data.data_utils_special import add_special_tokens
 from modeling.bagel import BagelConfig, Bagel, Qwen2Config, Qwen2ForCausalLM, SiglipVisionConfig, SiglipVisionModel
 from modeling.qwen2 import Qwen2Tokenizer
 from modeling.autoencoder import load_ae

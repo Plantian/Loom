@@ -3,7 +3,7 @@
 
 import functools
 import os, sys
-sys.path('YOUR_PYTHON_FILE_BASE_PATH')
+sys.path('YOUR_PYTHON_FILE_BASE_PATH') # Loom
 import yaml
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -22,7 +22,7 @@ from transformers.optimization import (
     get_cosine_with_min_lr_schedule_with_warmup,
 )
 from data.dataset_base import DataConfig, PackedDataset, collate_wrapper
-from data.data_utils import add_special_tokens
+from data.data_utils_special import add_special_tokens
 from modeling.autoencoder import load_ae
 from modeling.bagel import (
     BagelConfig, Bagel, Qwen2Config, Qwen2ForCausalLM, SiglipVisionConfig, SiglipVisionModel
@@ -33,7 +33,33 @@ from train.fsdp_utils import (
     FSDPCheckpoint, FSDPConfig, grad_checkpoint_check_fn, fsdp_wrapper, 
     fsdp_ema_setup, fsdp_ema_update,
 )
-# from peft import LoraConfig, get_peft_model
+# For no Wandb version
+
+def count_parameters(module: torch.nn.Module) -> int:
+    return sum(p.numel() for p in module.parameters())
+
+
+def qwen2_flop_coefficients(config) -> tuple[float, float]:
+    hidden_size = config.hidden_size
+    vocab_size = config.vocab_size
+    num_hidden_layers = config.num_hidden_layers
+    num_key_value_heads = config.num_key_value_heads
+    num_attention_heads = config.num_attention_heads
+    intermediate_size = config.intermediate_size
+    head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+
+    q_size = num_attention_heads * head_dim
+    k_size = num_key_value_heads * head_dim
+    v_size = num_key_value_heads * head_dim
+
+    mlp_N = hidden_size * intermediate_size * 3
+    attn_linear_N = hidden_size * (q_size + k_size + v_size + num_attention_heads * head_dim)
+    emd_and_lm_head_N = vocab_size * hidden_size * 2
+    dense_N = (mlp_N + attn_linear_N) * num_hidden_layers + emd_and_lm_head_N
+    dense_token_factor = 6.0 * dense_N
+    attn_factor = 12.0 * head_dim * num_attention_heads * num_hidden_layers
+    return dense_token_factor, attn_factor
+
 
 @dataclass
 class ModelArguments:
@@ -439,7 +465,6 @@ def main():
         num_shard=training_args.num_shard,
     )
     ema_model = deepcopy(model)
-    # else:
     model, ema_model = FSDPCheckpoint.try_load_ckpt_all_params(
         resume_from, 
         logger, 
@@ -545,16 +570,36 @@ def main():
 
     # train loop
     start_time = time()
+    token_window = 0.0
+    seqlen_square_window = 0.0
+    dense_token_factor, attn_factor = qwen2_flop_coefficients(model.language_model.config)
     logger.info(f"Training for {training_args.total_steps} steps, starting at {train_step}...")
     for curr_step, data in enumerate(train_loader, start=train_step):
         data = data.cuda(device).to_dict()
         data_indexes = data.pop('batch_data_indexes', None)
         ce_loss_weights = data.pop('ce_loss_weights', None)
+        
+        tokens_tensor = torch.tensor(float(data['sequence_length']), device=device)
+        dist.all_reduce(tokens_tensor, op=dist.ReduceOp.SUM)
+        token_window += tokens_tensor.item()
+        
+        if data['sample_lens']:
+            sample_lens_tensor = torch.tensor(data['sample_lens'], dtype=torch.float32, device=device)
+            sample_square = torch.dot(sample_lens_tensor, sample_lens_tensor)
+            dist.all_reduce(sample_square, op=dist.ReduceOp.SUM)
+            seqlen_square_window += sample_square.item()
+        
         with torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
             if training_args.visual_gen:
                 with torch.no_grad():
                     data['padded_latent'] = vae_model.encode(data.pop('padded_images'))
-            loss_dict = fsdp_model(**data)
+            try:
+                loss_dict = fsdp_model(**data)
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    logger.error(f"CUDA OOM at step {curr_step}: {e}")
+                    torch.cuda.empty_cache()
+                raise e
 
         loss = 0
         ce = loss_dict["ce"]
@@ -571,7 +616,7 @@ def main():
             loss_dict["ce"] = ce.detach()
             loss = loss + ce * training_args.ce_weight
         else:
-            assert not training_args.visual_und
+            # assert not training_args.visual_und
             loss_dict["ce"] = torch.tensor(0, device=device)
             total_ce_tokens = torch.tensor(0, device=device)
 
@@ -589,7 +634,6 @@ def main():
 
         optimizer.zero_grad()
         loss.backward()
-        # total_norm = fsdp_model.clip_grad_norm_(training_args.max_grad_norm)
         optimizer.step()
         scheduler.step()
         fsdp_ema_update(ema_model, fsdp_model, decay=training_args.ema)
@@ -598,15 +642,35 @@ def main():
         if curr_step % training_args.log_every == 0:
             total_samples = torch.tensor(len(data['sample_lens']), device=device)
             dist.all_reduce(total_samples, op=dist.ReduceOp.SUM)
-
+            
             # Measure training speed:
             torch.cuda.synchronize()
             end_time = time()
-            steps_per_sec = training_args.log_every / (end_time - start_time)
+            elapsed = max(end_time - start_time, 1e-6)
+            steps_per_sec = training_args.log_every / elapsed
+            tokens_per_sec = token_window / elapsed
+            tokens_per_step = token_window / training_args.log_every
+            flops_all_token = dense_token_factor * token_window + attn_factor * seqlen_square_window
+            actual_tflops = flops_all_token / elapsed / 1e12
+            peak_total_tflops = training_args.peak_device_tflops * dist.get_world_size()
+            mfu_value = actual_tflops / peak_total_tflops if peak_total_tflops > 0 else 0.0
             message = f"(step={curr_step:07d}) "
             # wandb_log = {}
             for key, value in loss_dict.items():
                 # Reduce loss history over all processes:
+                avg_loss = torch.tensor(value.item(), device=device)
+                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+                avg_loss = avg_loss.item() / dist.get_world_size()
+                message += f"Train Loss {key}: {avg_loss:.4f}, "
+                # wandb_log[key] = avg_loss
+            message += f"Train Steps/Sec: {steps_per_sec:.2f}, Tokens/Sec: {tokens_per_sec/1000:.2f}k, MFU: {mfu_value*100:.1f}%, "
+            logger.info(message)
+            
+            torch.cuda.synchronize()
+            end_time = time()
+            steps_per_sec = training_args.log_every / (end_time - start_time)
+            message = f"(step={curr_step:07d}) "
+            for key, value in loss_dict.items():
                 avg_loss = torch.tensor(value.item(), device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / dist.get_world_size()
@@ -649,10 +713,49 @@ def main():
                 data_status=gather_list
             )
             logger.warning("save checkpoints success")
-
+            # stop the training process by yourself.
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+        if curr_step >= training_args.total_steps:
+            logger.info(f"Reached total_steps={training_args.total_steps}, stopping training.")
+            break
+        
+    if curr_step > 0:
+        logger.info(f"Saving final checkpoint at step {curr_step}...")
+        # Clear caches and ensure all CUDA operations complete before final checkpoint
+        
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        if dist.get_rank() == 0:
+            gather_list = [None] * dist.get_world_size()
+        else:
+            gather_list = None
+        try:
+            dist.gather_object(data_status, gather_list, dst=0)
+        except RuntimeError as e:
+            logger.error(f"Error during final gather_object: {e}")
+            gather_list = None if dist.get_rank() != 0 else [data_status] * dist.get_world_size()
+        
+        FSDPCheckpoint.fsdp_save_ckpt(
+            ckpt_dir=training_args.checkpoint_dir, 
+            train_steps=curr_step, 
+            model=fsdp_model, 
+            ema_model=ema_model, 
+            optimizer=optimizer, 
+            scheduler=scheduler, 
+            logger=logger,
+            fsdp_config=fsdp_config,
+            data_status=gather_list
+        )
+        
+        # Clear CUDA cache and force garbage collection after final checkpoint
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        logger.info(f"Final checkpoint saved at step {curr_step}")
+        
     logger.info("Done!")
     dist.destroy_process_group()
-
 
 if __name__ == "__main__":
     main()

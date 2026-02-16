@@ -8,7 +8,7 @@ import json
 import numpy as np
 import torch
 
-from .data_utils import (
+from .data_utils_special import (
     get_flattened_position_ids_interpolate,
     get_flattened_position_ids_extrapolate, 
     len2weight,

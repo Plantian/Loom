@@ -1,7 +1,6 @@
 # Copyright 2025 Bytedance Ltd. and/or its affiliates.
 # SPDX-License-Identifier: Apache-2.0
 
-
 import math
 import random
 from PIL import Image
@@ -139,90 +138,109 @@ def add_special_tokens(tokenizer):
 
     if '<|im_start|>' not in all_special_tokens:
         new_tokens.append('<|im_start|>')
+
     if '<|im_end|>' not in all_special_tokens:
         new_tokens.append('<|im_end|>')
+
     if '<|vision_start|>' not in all_special_tokens:
         new_tokens.append('<|vision_start|>')
+
     if '<|vision_end|>' not in all_special_tokens:
         new_tokens.append('<|vision_end|>')
-    if '<|turn_1|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_1|>')  
-    if '<|turn_2|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_2|>')
-    if '<|turn_3|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_3|>')   
-    if '<|turn_4|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_4|>')
-    if '<|turn_5|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_5|>')  
-    if '<|turn_6|>' not in all_special_tokens: 
-        new_tokens.append('<|turn_6|>')
         
-    if '<|Stage 1|>' not in all_special_tokens:
-        new_tokens.append('<|Stage 1|>')
-    if '<|Stage 2|>' not in all_special_tokens:
-        new_tokens.append('<|Stage 2|>')
-    
-    if '<image 1>' not in all_special_tokens:
-        new_tokens.append('<image 1>')
     if '<style>' not in all_special_tokens:
         new_tokens.append('<style>')
-    if '<image 2>' not in all_special_tokens:
-        new_tokens.append('<image 2>')
         
-    if '<original_image>' not in all_special_tokens:
-        new_tokens.append('<original_image>')
-    if '<lower>' not in all_special_tokens:
-        new_tokens.append('<lower>')
-    if '<upper>' not in all_special_tokens:
-        new_tokens.append('<upper>')
-    if '<model>' not in all_special_tokens:
-        new_tokens.append('model>')
-    if '<object>' not in all_special_tokens:
-        new_tokens.append('<object>')
-     
-    # group for image index tokens
-    num_new_tokens = tokenizer.add_tokens(new_tokens) # Add new special tokens
+    if '<subject>' not in all_special_tokens:
+        new_tokens.append('<subject>')
+        
+    if '<id>' not in all_special_tokens:
+        new_tokens.append('<id>')
+
+    if '<icon>' not in all_special_tokens:
+        new_tokens.append('<icon>')
+
+    if '<text>' not in all_special_tokens:
+        new_tokens.append('<text>')
+    
+    if '<pose>' not in all_special_tokens:
+        new_tokens.append('<pose>')
+        
+    if '<layout>' not in all_special_tokens:
+        new_tokens.append('<layout>')
+    
+    if '<perspective>' not in all_special_tokens:
+        new_tokens.append('<perspective>')
+
+    if '<lighting>' not in all_special_tokens:
+        new_tokens.append('<lighting>')
+
+    if '<background>' not in all_special_tokens:
+        new_tokens.append('<background>')
+
+    if '<environment>' not in all_special_tokens:
+        new_tokens.append('<environment>')
+    
+    if '<emotion>' not in all_special_tokens:
+        new_tokens.append('<emotion>')
+        
+    if '<clothing>' not in all_special_tokens:
+        new_tokens.append('<clothing>')
+
+    if '<texture>' not in all_special_tokens:
+        new_tokens.append('<texture>')
+
+    if '<select>' not in all_special_tokens:
+        new_tokens.append('<select>')
+
+
+
+    num_new_tokens = tokenizer.add_tokens(new_tokens)
     bos_token_id = tokenizer.convert_tokens_to_ids('<|im_start|>')
     eos_token_id = tokenizer.convert_tokens_to_ids('<|im_end|>')
     start_of_image = tokenizer.convert_tokens_to_ids('<|vision_start|>')
     end_of_image = tokenizer.convert_tokens_to_ids('<|vision_end|>')
-    
-    # group for turn index tokens continously
-    turn_1 = tokenizer.convert_tokens_to_ids("<|turn_1|>")
-    turn_2 = tokenizer.convert_tokens_to_ids("<|turn_2|>")
-    turn_3 = tokenizer.convert_tokens_to_ids("<|turn_3|>")
-    turn_4 = tokenizer.convert_tokens_to_ids("<|turn_4|>")
-    turn_5 = tokenizer.convert_tokens_to_ids("<|turn_5|>")
-    turn_6 = tokenizer.convert_tokens_to_ids("<|turn_6|>")
-    
-    stage_1 = tokenizer.convert_tokens_to_ids('<|Stage 1|>')
-    stage_2 = tokenizer.convert_tokens_to_ids('<|Stage 2|>')
-    
-    # turn for style tranform
-    style = tokenizer.convert_tokens_to_ids("<style>")
-    image_1 = tokenizer.convert_tokens_to_ids("<image 1>")
-    image_2 = tokenizer.convert_tokens_to_ids("<image 2>")
-    
-    original_image = tokenizer.convert_tokens_to_ids("<original_image>")
-    lower = tokenizer.convert_tokens_to_ids("<lower>")
-    upper = tokenizer.convert_tokens_to_ids("<upper>")
-    model = tokenizer.convert_tokens_to_ids("<model>")
-    object  = tokenizer.convert_tokens_to_ids("<object>")
-    
+    style_id = tokenizer.convert_tokens_to_ids('<style>')
+    subject_id = tokenizer.convert_tokens_to_ids('<subject>')
+    id_id = tokenizer.convert_tokens_to_ids('<id>')
+    icon_id = tokenizer.convert_tokens_to_ids('<icon>')
+    text_id = tokenizer.convert_tokens_to_ids('<text>')
+    pose_id = tokenizer.convert_tokens_to_ids('<pose>')
+    layout_id = tokenizer.convert_tokens_to_ids('<layout>')
+    perspective_id = tokenizer.convert_tokens_to_ids('<perspective>')
+    lighting_id = tokenizer.convert_tokens_to_ids('<lighting>')
+    background_id = tokenizer.convert_tokens_to_ids('<background>')
+    environment_id = tokenizer.convert_tokens_to_ids('<environment>')
+    emotion_id = tokenizer.convert_tokens_to_ids('<emotion>')
+    clothing_id = tokenizer.convert_tokens_to_ids('<clothing>')
+    texture_id = tokenizer.convert_tokens_to_ids('<texture>')
+    select_id = tokenizer.convert_tokens_to_ids('<select>')
+
+
+
     new_token_ids = dict(
         bos_token_id=bos_token_id, 
         eos_token_id=eos_token_id, 
         start_of_image=start_of_image, 
         end_of_image=end_of_image, 
-        turn_1=turn_1, turn_2=turn_2, turn_3=turn_3, turn_4=turn_4, turn_5=turn_5, turn_6=turn_6,
-        stage_1=stage_1, stage_2=stage_2,
-        style=style, image_1=image_1, image_2=image_2,
-        original_image=original_image, lower=lower, upper=upper, model=model, object=object
+        style_id=style_id,
+        subject_id=subject_id,
+        id_id=id_id,
+        icon_id=icon_id,
+        text_id=text_id,
+        pose_id=pose_id,
+        layout_id=layout_id,
+        perspective_id=perspective_id,
+        lighting_id=lighting_id,
+        background_id=background_id,
+        environment_id=environment_id,
+        emotion_id=emotion_id,
+        clothing_id=clothing_id,
+        texture_id=texture_id,
+        select_id=select_id,
     )
 
     return tokenizer, new_token_ids, num_new_tokens
-
 
 def len2weight(x, loss_reduction='square'):
     if x == 0:

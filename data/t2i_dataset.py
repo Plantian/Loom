@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 import random
 from PIL import Image
 
-from .data_utils import pil_img2rgb
+from .data_utils_special import pil_img2rgb
 from .distributed_iterable_dataset import DistributedIterableDataset
 from .parquet_utils import get_parquet_data_paths, init_arrow_pf_fs
 
@@ -65,7 +65,7 @@ class T2IIterableDataset(DistributedIterableDataset):
 
                         for row_idx, row in df.iterrows():
                             num_tokens = 0
-                            try:·
+                            try:
                                 image_byte = row['image']
                                 image = pil_img2rgb(Image.open(io.BytesIO(image_byte)))
                             except Exception as e:
