@@ -1,22 +1,41 @@
-# Copyright 2025 Bytedance Ltd. and/or its affiliates.
-# SPDX-License-Identifier: Apache-2.0
+# replace the variables with your own, reference this bash scripts
 
-# replace the variables with your own
+export CUDA_VISIBLE_DEVICES=1,2,3,4
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export WANDB_DISABLE=true
+export WANDB_MODE=disabled
+export WANDB_MODE=offline
+
 torchrun \
-  --nnodes=$num_nodes \
-  --node_rank=$node_rank \
-  --nproc_per_node=8 \
-  --master_addr=$master_addr \
-  --master_port=$master_port \
+  --nnodes=1 \
+  --node_rank=0 \
+  --nproc_per_node=4 \
+  --master_addr=127.0.0.1 \
+  --master_port=12347 \
   train/pretrain_unified_navit.py \
-  --dataset_config_file ./data/configs/example.yaml \
+  --num_shard 4 \
+  --use_lora False \
+  # --lora_r 8 \
+  # --lora_alpha 32 \
+  --visual_gen True \
+  --visual_und False \
+  --save_every 500 \
+  --total_steps 20000 \
+  --log_every 1 \
+  --warmup_steps 0 \
+  --lr 0.0005 \
+  --dataset_config_file  \
+  --model_path  \
   --layer_module Qwen2MoTDecoderLayer \
-  --vae_path $vae_path \
-  --vit_path $vit_path \
-  --llm_path $llm_path \
-  --use_flex True \
-  --resume_from $resume_from \
-  --results_dir $output_path \
-  --checkpoint_dir $ckpt_path \
-  --max_latent_size 64  \
-  --num_workers 1 # use small num_workers since the num_used_data (10) are not enough to split
+  --max_latent_size 64 \
+  --resume-from \
+  --finetune_from_hf True \
+  --auto_resume True \
+  --resume-model-only True \
+  --finetune-from-ema True \
+  --num_worker 1 \
+  --expected_num_tokens 20000 \
+  --max_num_tokens 27000 \
+  --max_num_tokens_per_sample 27000 \
+  --results_dir  \
+  --checkpoint_dir  \

@@ -1,4 +1,5 @@
 t2i_pretrain:
+  #NOTE: 可以选择性加入interleaved output section当中的分步操作进行sft对齐，比如做菜教程，我们拆解成不同的X步，每次只训练一步的T2I
   dataset_names:
   - t2i
   image_transform_args:

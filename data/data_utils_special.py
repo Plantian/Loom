@@ -193,7 +193,9 @@ def add_special_tokens(tokenizer):
     if '<select>' not in all_special_tokens:
         new_tokens.append('<select>')
 
-
+    for idx in range(6):
+        if f'<turn_{idx+1}>' not in all_special_tokens:
+            new_tokens.append(f'<turn_{idx+1}>')
 
     num_new_tokens = tokenizer.add_tokens(new_tokens)
     bos_token_id = tokenizer.convert_tokens_to_ids('<|im_start|>')
@@ -215,8 +217,12 @@ def add_special_tokens(tokenizer):
     clothing_id = tokenizer.convert_tokens_to_ids('<clothing>')
     texture_id = tokenizer.convert_tokens_to_ids('<texture>')
     select_id = tokenizer.convert_tokens_to_ids('<select>')
-
-
+    turn_1 = tokenizer.convert_tokens_to_ids('<turn_1>')
+    turn_2 = tokenizer.convert_tokens_to_ids('<turn_2>')
+    turn_3 = tokenizer.convert_tokens_to_ids('<turn_3>')
+    turn_4 = tokenizer.convert_tokens_to_ids('<turn_4>')
+    turn_5 = tokenizer.convert_tokens_to_ids('<turn_5>')
+    turn_6 = tokenizer.convert_tokens_to_ids('<turn_6>')
 
     new_token_ids = dict(
         bos_token_id=bos_token_id, 
@@ -238,6 +244,12 @@ def add_special_tokens(tokenizer):
         clothing_id=clothing_id,
         texture_id=texture_id,
         select_id=select_id,
+        turn_1=turn_1,
+        turn_2=turn_2,
+        turn_3=turn_3,
+        turn_4=turn_4,
+        turn_5=turn_5,
+        turn_6=turn_6,
     )
 
     return tokenizer, new_token_ids, num_new_tokens

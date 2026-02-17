@@ -13,6 +13,7 @@ from .parquet_utils import get_parquet_data_paths, init_arrow_pf_fs
 
 Image.MAX_IMAGE_PIXELS = 20_000_000
 
+#NOTE: 可以选择性加入interleaved output section当中的分步操作进行sft对齐，比如做菜教程，我们拆解成不同的X步，每次只训练一步的T2I
 
 class T2IIterableDataset(DistributedIterableDataset):
     def __init__(
