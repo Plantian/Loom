@@ -1,9 +1,13 @@
 import io
+import os
+import re
+import random
+import torch
+import subprocess
+import pyarrow.fs as pf
+import torch.distributed as dist
 import pyarrow.parquet as pq
-
 from PIL import Image, ImageFile, PngImagePlugin
-from ..distributed_iterable_dataset import DistributedIterableDataset
-from ..parquet_utils import get_parquet_data_paths, init_arrow_pf_fs
 from ..data_utils_special import pil_img2rgb
 
 Image.MAX_IMAGE_PIXELS = 200000000
@@ -12,126 +16,57 @@ MaximumDecompressedSize = 1024
 MegaByte = 2 ** 20
 PngImagePlugin.MAX_TEXT_CHUNK = MaximumDecompressedSize * MegaByte
 
-class InterleavedBaseIterableDataset(DistributedIterableDataset):
 
-    def _init_data(self):
-        data = {
-            'sequence_plan': [],
-            'text_ids_list': [],
-            'image_tensor_list': [],
-            'num_tokens': 0,
-        }
-        return data
+class DistributedIterableDataset(torch.utils.data.IterableDataset):
+    def __init__(self, dataset_name, local_rank=0, world_size=1, num_workers=8):
+        self.dataset_name = dataset_name
+        self.local_rank = local_rank
+        self.world_size = world_size
+        self.num_workers = num_workers
+        self.rng = random.Random()
+        self.data_paths = None
 
-    def _add_text(self, data, text, need_loss, enable_cfg=True):
-        text_ids = self.tokenizer.encode(text)
-        data['num_tokens'] += len(text_ids)
-        data['text_ids_list'].append(text_ids)
-        data['sequence_plan'].append(
-            {
-                'type': 'text',
-                'enable_cfg': int(enable_cfg),
-                'loss': int(need_loss),
-                'special_token_loss': 0,
-                'special_token_label': None,
-            }
-        )
-        return data
+    def get_data_paths(self, *args, **kwargs):
+        raise NotImplementedError
 
-    def _add_image(self, data, image, need_loss, need_vae, need_vit, enable_cfg=True):
-        assert need_loss or need_vae or need_vit
+    def set_epoch(self, seed=42):
+        if self.data_paths is None:
+            return
 
-        if need_loss:
-            data['sequence_plan'].append(
-                {
-                    'type': 'vae_image', 
-                    'enable_cfg': 0, 
-                    'loss': 1, 
-                    'special_token_loss': 0,
-                    'special_token_label': None,
-                }
-            )
+        if isinstance(self.data_paths[0], tuple):
+            data_paths = sorted(self.data_paths, key=lambda x: (x[0], x[1]))
+        elif isinstance(self.data_paths[0], str):
+            data_paths = sorted(self.data_paths)
+        else:
+            raise ValueError(f"Unknown data_paths type: {type(self.data_paths[0])}")
 
-            image_tensor = self.transform(image)
-            height, width = image_tensor.shape[1:]
-            data['num_tokens'] += width * height // self.transform.stride ** 2
-            data['image_tensor_list'].append(image_tensor)
+        self.rng.seed(seed)
+        self.rng.shuffle(data_paths)
 
-        if need_vae:
-            data['sequence_plan'].append(
-                {
-                    'type': 'vae_image', 
-                    'enable_cfg': int(enable_cfg), 
-                    'loss': 0, 
-                    'special_token_loss': 0,
-                    'special_token_label': None,
-                }
-            )
+        num_files_per_rank = len(data_paths) // self.world_size
+        local_start = self.local_rank * num_files_per_rank
+        local_end = (self.local_rank + 1) * num_files_per_rank
+        self.num_files_per_rank = num_files_per_rank
+        self.data_paths_per_rank = data_paths[local_start:local_end]
 
-            image_tensor = self.transform(image)
-            height, width = image_tensor.shape[1:]
-            data['num_tokens'] += width * height // self.transform.stride ** 2
-            data['image_tensor_list'].append(image_tensor.clone())
+    def get_data_paths_per_worker(self):
+        if self.data_paths is None:
+            return None
 
-        if need_vit:
-            data['sequence_plan'].append(
-                {
-                    'type': 'vit_image',
-                    'enable_cfg': int(enable_cfg), 
-                    'loss': 0,
-                    'special_token_loss': 0,
-                    'special_token_label': None,
-                },
-            )
-            vit_image_tensor = self.vit_transform(image)
-            height, width = vit_image_tensor.shape[1:]
-            data['num_tokens'] += width * height // self.vit_transform.stride ** 2
-            data['image_tensor_list'].append(vit_image_tensor)
+        info = torch.utils.data.get_worker_info()
+        if info is None:
+            return self.data_paths_per_rank, 0
 
-        return data
+        worker_id = info.id
+        num_files_per_worker = self.num_files_per_rank // info.num_workers
+        start = num_files_per_worker * worker_id
+        end = num_files_per_worker * (worker_id + 1)
+        data_paths_per_worker = self.data_paths_per_rank[start:end]
 
-    def _add_video(self, data, frames, frame_indexes, need_loss, need_vae, enable_cfg=True):
-        assert int(need_loss) + int(need_vae) == 1
+        return data_paths_per_worker[::-1], worker_id
 
-        if need_loss:
-            for idx, (image, frame_idx) in enumerate(zip(frames, frame_indexes)):
-                current_sequence_plan = {
-                    'type': 'vae_image', 
-                    'enable_cfg': 0, 
-                    'loss': 1, 
-                    'special_token_loss': 0,
-                    'special_token_label': None,
-                    'split_start': idx == 0,
-                    'split_end': idx == len(frames) - 1,
-                }
-                if idx < len(frame_indexes) - 1:
-                    current_sequence_plan['frame_delta'] = frame_indexes[idx + 1] - frame_idx
-                data['sequence_plan'].append(current_sequence_plan)
-                image_tensor = self.transform(image)
-                height, width = image_tensor.shape[1:]
-                data['image_tensor_list'].append(image_tensor)
-                data['num_tokens'] += width * height // self.transform.stride ** 2
-
-        elif need_vae:
-            for idx, (image, frame_idx) in enumerate(zip(frames, frame_indexes)):
-                current_sequence_plan = {
-                    'type': 'vae_image', 
-                    'enable_cfg': int(enable_cfg), 
-                    'loss': 0, 
-                    'special_token_loss': 0,
-                    'special_token_label': None,
-                    'split_start': idx == 0,
-                    'split_end': idx == len(frames) - 1,
-                }
-                if idx < len(frame_indexes) - 1:
-                    current_sequence_plan['frame_delta'] = frame_indexes[idx + 1] - frame_idx
-                data['sequence_plan'].append(current_sequence_plan)
-                image_tensor = self.transform(image)
-                height, width = image_tensor.shape[1:]
-                data['image_tensor_list'].append(image_tensor)
-                data['num_tokens'] += width * height // self.transform.stride ** 2
-
-        return data
+    def __iter__(self):
+        raise NotImplementedError
 
 
 class ParquetStandardIterableDataset(DistributedIterableDataset):
@@ -215,6 +150,162 @@ class ParquetStandardIterableDataset(DistributedIterableDataset):
                     row_start_id = 0
             global_row_group_start_id = 0
             print(f"{self.dataset_name} repeat in rank-{self.local_rank} worker-{worker_id}")
+
+
+def get_parquet_data_paths(data_dir_list, num_sampled_data_paths, rank=0, world_size=1):
+    num_data_dirs = len(data_dir_list)
+    if world_size > 1:
+        chunk_size = (num_data_dirs + world_size - 1) // world_size
+        start_idx = rank * chunk_size
+        end_idx = min(start_idx + chunk_size, num_data_dirs)
+        local_data_dir_list = data_dir_list[start_idx:end_idx]
+        local_num_sampled_data_paths = num_sampled_data_paths[start_idx:end_idx]
+    else:
+        local_data_dir_list = data_dir_list
+        local_num_sampled_data_paths = num_sampled_data_paths
+
+    local_data_paths = []
+    for data_dir, num_data_path in zip(local_data_dir_list, local_num_sampled_data_paths):
+        if data_dir.startswith("hdfs://"):
+            files = hdfs_ls_cmd(data_dir)
+            data_paths_per_dir = [
+                file for file in files if file.endswith(".parquet")
+            ]
+        else:
+            files = os.listdir(data_dir)
+            data_paths_per_dir = [
+                os.path.join(data_dir, name)
+                for name in files
+                if name.endswith(".parquet")
+            ]
+        repeat = num_data_path // len(data_paths_per_dir)
+        data_paths_per_dir = data_paths_per_dir * (repeat + 1)
+        local_data_paths.extend(data_paths_per_dir[:num_data_path])
+
+    if world_size > 1:
+        gather_list = [None] * world_size
+        dist.all_gather_object(gather_list, local_data_paths)
+
+        combined_chunks = []
+        for chunk_list in gather_list:
+            if chunk_list is not None:
+                combined_chunks.extend(chunk_list)
+    else:
+        combined_chunks = local_data_paths
+
+    return combined_chunks
+
+
+# NOTE: cumtomize this function for your cluster
+def get_hdfs_host():
+    return "hdfs://xxx"
+
+
+# NOTE: cumtomize this function for your cluster
+def get_hdfs_block_size():
+    return 134217728
+
+
+# NOTE: cumtomize this function for your cluster
+def get_hdfs_extra_conf():
+    return None
+
+
+def init_arrow_pf_fs(parquet_file_path):
+    if parquet_file_path.startswith("hdfs://"):
+        fs = pf.HadoopFileSystem(
+            host=get_hdfs_host(),
+            port=0,
+            buffer_size=get_hdfs_block_size(),
+            extra_conf=get_hdfs_extra_conf(),
+        )
+    else:
+        fs = pf.LocalFileSystem()
+    return fs
+
+
+def hdfs_ls_cmd(dir):
+    result = subprocess.run(["hdfs", "dfs", "ls", dir], capture_output=True, text=True).stdout
+    return ['hdfs://' + i.split('hdfs://')[-1].strip() for i in result.split('\n') if 'hdfs://' in i]
+
+
+class InterleavedBaseIterableDataset(DistributedIterableDataset):
+
+    def _init_data(self):
+        data = {
+            'sequence_plan': [],
+            'text_ids_list': [],
+            'image_tensor_list': [],
+            'num_tokens': 0,
+        }
+        return data
+
+    def _add_text(self, data, text, need_loss, enable_cfg=True):
+        text_ids = self.tokenizer.encode(text)
+        data['num_tokens'] += len(text_ids)
+        data['text_ids_list'].append(text_ids)
+        data['sequence_plan'].append(
+            {
+                'type': 'text',
+                'enable_cfg': int(enable_cfg),
+                'loss': int(need_loss),
+                'special_token_loss': 0,
+                'special_token_label': None,
+            }
+        )
+        return data
+
+    def _add_image(self, data, image, need_loss, need_vae, need_vit, enable_cfg=True):
+        assert need_loss or need_vae or need_vit
+
+        if need_loss:
+            data['sequence_plan'].append(
+                {
+                    'type': 'vae_image', 
+                    'enable_cfg': 0, 
+                    'loss': 1, 
+                    'special_token_loss': 0,
+                    'special_token_label': None,
+                }
+            )
+
+            image_tensor = self.transform(image)
+            height, width = image_tensor.shape[1:]
+            data['num_tokens'] += width * height // self.transform.stride ** 2
+            data['image_tensor_list'].append(image_tensor)
+
+        if need_vae:
+            data['sequence_plan'].append(
+                {
+                    'type': 'vae_image', 
+                    'enable_cfg': int(enable_cfg), 
+                    'loss': 0, 
+                    'special_token_loss': 0,
+                    'special_token_label': None,
+                }
+            )
+
+            image_tensor = self.transform(image)
+            height, width = image_tensor.shape[1:]
+            data['num_tokens'] += width * height // self.transform.stride ** 2
+            data['image_tensor_list'].append(image_tensor.clone())
+
+        if need_vit:
+            data['sequence_plan'].append(
+                {
+                    'type': 'vit_image',
+                    'enable_cfg': int(enable_cfg), 
+                    'loss': 0,
+                    'special_token_loss': 0,
+                    'special_token_label': None,
+                },
+            )
+            vit_image_tensor = self.vit_transform(image)
+            height, width = vit_image_tensor.shape[1:]
+            data['num_tokens'] += width * height // self.vit_transform.stride ** 2
+            data['image_tensor_list'].append(vit_image_tensor)
+
+        return data
 
 
 class MakeAnythingIconUnifiedEditIterableDataset(InterleavedBaseIterableDataset, ParquetStandardIterableDataset):
