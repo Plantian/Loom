@@ -54,7 +54,7 @@ Our contributions are as follows:
 ### 1. Preparation
 You can clone this repository in advance to get ready for the upcoming code release:
 ```bash
-git clone https://github.com/YOUR_GITHUB_NAME/Loom.git  # Update with your real repo link later
+git clone https://github.com/Plantian/Loom.git
 cd Loom
 ```
 
