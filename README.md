@@ -2,7 +2,7 @@
 
 # 🚀 [CVPR 2026 Findings] Loom: Diffusion-Transformer for Interleaved Generation
 
-<a href='https://arxiv.org/abs/2512.18254'><img src='https://img.shields.io/badge/Loom-Paper-green?logo=arxiv'></a>
+<a href='https://openaccess.thecvf.com/content/CVPR2026F/papers/Ye_Loom_Diffusion-Transformer_for_Interleaved_Generation_CVPRF_2026_paper.pdf'><img src='https://img.shields.io/badge/Loom-Paper-blue?logo=arxiv'></a>
 <a href='https://huggingface.co/datasets/plantian/Loom_01'><img src='https://img.shields.io/badge/Loom-Huggingface Dataset-yellow?logo=huggingface'></a>
 
 ![theme](/assets/theme.jpg)
@@ -94,13 +94,12 @@ Loom is licensed under the **Apache 2.0** License.
 If you think this project is helpful, please reference this paper:
 
 ```bibtex
-@misc{ye2025loomdiffusiontransformerinterleavedgeneration,
-      title={Loom: Diffusion-Transformer for Interleaved Generation}, 
-      author={Mingcheng Ye and Jiaming Liu and Yiren Song},
-      year={2025},
-      eprint={2512.18254},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2512.18254}, 
+@InProceedings{Ye_2026_CVPR,
+    author    = {Ye, Mingcheng and Liu, Jiaming and Song, Yiren},
+    title     = {Loom: Diffusion-Transformer for Interleaved Generation},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Findings},
+    month     = {June},
+    year      = {2026},
+    pages     = {4582-4592}
 }
 ```
