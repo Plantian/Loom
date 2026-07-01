@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 [CVPR 2026 Findings] Loom: Diffusion-Transformer for Interleaved Generation
+# 🚀 [CVPRF 2026] Loom: Diffusion-Transformer for Interleaved Generation
 
 <a href='https://openaccess.thecvf.com/content/CVPR2026F/papers/Ye_Loom_Diffusion-Transformer_for_Interleaved_Generation_CVPRF_2026_paper.pdf'><img src='https://img.shields.io/badge/Loom-Paper-blue?logo=arxiv'></a>
 <a href='https://huggingface.co/datasets/plantian/Loom_01'><img src='https://img.shields.io/badge/Loom-Huggingface Dataset-yellow?logo=huggingface'></a>
